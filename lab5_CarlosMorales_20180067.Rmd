@@ -1,0 +1,150 @@
+---
+title: "Lab5_20180067"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Librerias
+```{r,warning=FALSE,message=FALSE}
+library(lubridate)
+library(nycflights13)
+library(readr)
+library(dplyr)
+library(modeest)
+```
+
+# Parte 1
+Se utiliza la zona horaria US/Central porque se consideró la más estandar para Norte América.
+El próximo ecplipse será el 2 de Septiembre del 2035 a las 2:09:49 CDT
+```{r,warning=FALSE,message=FALSE}
+fecha <- "21-08-2017T18:26:40US/Central"
+fecha_historica <- force_tz(dmy_hms(fecha),tzone = "US/Central")
+Sydonic_month <- days(29) + hours(12) + minutes(44) + seconds(3)
+Saros <- Sydonic_month * 223
+proximo_explipse <- fecha_historica + Saros
+proximo_explipse
+```
+
+# Parte 2 
+1. El unico codigo que usa llamadas es Actualización de información, y su mes con mas llamadas es Marzo
+
+```{r,warning=FALSE,message=FALSE}
+data <- read_csv("data.csv")
+names(data) <- c("Fecha1","Hora1","Caller_ID","Cod","Email","SMS","Call","Fecha2","Hora2")
+data$fecha1_ <- dmy(data$Fecha1) 
+data$fecha2_ <- dmy(data$Fecha2)
+data$hora1_ <- hms(data$Hora1)
+data$hora2_ <- hms(data$Hora2)
+data$mes <- month(data$fecha1_)
+mes_con_mas_llamadas <- data %>% filter(Call==1) %>% group_by(Cod) %>% summarise(mes = mlv(mes,method = "mfv"))
+mes_con_mas_llamadas
+```
+
+2. El dia más ocupado es el Domingo
+```{r,warning=FALSE,message=FALSE}
+data$dia <- weekdays(data$fecha1_)
+ocupacion_dia <- data %>% group_by(dia) %>% summarise(Actividad = n()) %>% arrange(-Actividad)
+ocupacion_dia
+```
+
+3. El mes más ocupado es Octubre
+```{r,warning=FALSE,message=FALSE}
+ocupacion_mes <- data %>% group_by(mes) %>% summarise(Actividad = n()) %>% arrange(-Actividad)
+ocupacion_mes
+```
+
+4. No se observa una estacionalidad marcada en las llamadas, ya que los meses estan bastante dispersos respecto a su orden cronológico, y elmes con más llamadas es Marzo
+```{r,warning=FALSE,message=FALSE}
+llamadas_mes <- data %>% filter(Call ==1) %>% group_by(mes) %>% summarise(Actividad = n()) %>% arrange(-Actividad)
+llamadas_mes
+```
+
+5. La duración promedio de las llamadas es de 14 minutos 33.474 segundos
+
+```{r,warning=FALSE,message=FALSE}
+data$duracion <- difftime(dmy_hms(paste0(data$Fecha2,"T",data$Hora2)),dmy_hms(paste(data$Fecha1,"T",data$Hora1)))
+data$duracion_real <- ifelse(data$hora2_ >= data$hora1_,data$duracion,period_to_seconds(data$hora2_ + (hours(24)-data$hora1_)))
+data$minutos <- data$duracion_real/60
+media_llamadas <- data %>% filter(Call==1) %>% summarise(Media = mean(minutos))
+media_llamadas
+60*0.5579
+```
+6. Frecuencias:
+```{r}
+llamadas <- data[data$Call==1,]
+duracion_llamadas <- data.frame(table(llamadas$minutos,dnn = "Minutos"))
+duracion_llamadas
+```
+
+# Parte 3
+```{r,warning=FALSE,message=FALSE}
+signo <-function(nacimiento){
+fecha_n <- dmy(nacimiento)
+signo <- NA
+if((day(fecha_n) >= 21 & month(fecha_n) == 3) | (day(fecha_n) <= 20 & month(fecha_n) == 4)){
+  signo <- "Aries"
+}
+if((day(fecha_n) >= 21 & month(fecha_n) == 4) | (day(fecha_n) <= 20 & month(fecha_n) == 5)){
+  signo <- "Tauro"
+}
+if((day(fecha_n) >= 21 & month(fecha_n) == 5) | (day(fecha_n) <= 21 & month(fecha_n) == 6)){
+  signo <- "Geminis"
+}
+if((day(fecha_n) >= 23 & month(fecha_n) == 6) | (day(fecha_n) <= 22 & month(fecha_n) == 7)){
+  signo <- "Cancer"
+}
+if((day(fecha_n) >= 23 & month(fecha_n) == 7) | (day(fecha_n) <= 22 & month(fecha_n) == 8)){
+  signo <- "Leo"
+}
+if((day(fecha_n) >= 23 & month(fecha_n) == 8) | (day(fecha_n) <= 22 & month(fecha_n) == 9)){
+  signo <- "Virgo"
+}
+if((day(fecha_n) >= 23 & month(fecha_n) == 9) | (day(fecha_n) <= 22 & month(fecha_n) == 10)){
+  signo <- "Libra"
+}
+if((day(fecha_n) >= 23 & month(fecha_n) == 10) | (day(fecha_n) <= 22 & month(fecha_n) == 11)){
+  signo <- "Escorpio"
+}
+if((day(fecha_n) >= 23 & month(fecha_n) == 11) | (day(fecha_n) <= 21 & month(fecha_n) == 12)){
+  signo <- "Sagitario"
+}
+if((day(fecha_n) >= 22 & month(fecha_n) == 12) | (day(fecha_n) <= 20 & month(fecha_n) == 1)){
+  signo <- "Capricornio"
+}
+if((day(fecha_n) >= 21 & month(fecha_n) == 1) | (day(fecha_n) <= 18 & month(fecha_n) == 2)){
+  signo <- "Acuario"
+}
+if((day(fecha_n) >= 19 & month(fecha_n) == 2) | (day(fecha_n) <= 20 & month(fecha_n) == 3)){
+  signo <- "Piscis"
+}
+return(signo)
+}
+
+signo("20-12-1999")
+```
+# Parte 4 
+```{r,warning=FALSE,message=FALSE}
+fl <- flights
+fl$dep_time_ <- as.character(fl$dep_time)
+fl$sched_dep_time_ <- as.character(fl$sched_dep_time)
+fl$arr_time_ <- as.character(fl$arr_time)
+fl$sched_arr_time_ <- as.character(fl$sched_arr_time)
+
+fl$dep_time1 <- ifelse(fl$dep_time < 10,paste0("00:0",fl$dep_time_),ifelse(fl$dep_time < 100,paste0("00:",fl$dep_time_),ifelse(fl$dep_time < 1000,paste0("0",substring(fl$dep_time_,1,1),":",substring(fl$dep_time_,2,3)),paste0(substring(fl$dep_time_,1,2),":",substring(fl$dep_time_,3,4)))))
+
+fl$sched_dep_time1 <- ifelse(fl$sched_dep_time < 10,paste0("00:0",fl$sched_dep_time_),ifelse(fl$sched_dep_time < 100,paste0("00:",fl$sched_dep_time_),ifelse(fl$sched_dep_time < 1000,paste0("0",substring(fl$sched_dep_time_,1,1),":",substring(fl$sched_dep_time_,2,3)),paste0(substring(fl$sched_dep_time_,1,2),":",substring(fl$sched_dep_time_,3,4)))))
+
+fl$arr_time1 <- ifelse(fl$arr_time < 10,paste0("00:0",fl$arr_time_),ifelse(fl$arr_time < 100,paste0("00:",fl$arr_time_),ifelse(fl$arr_time < 1000,paste0("0",substring(fl$arr_time_,1,1),":",substring(fl$arr_time_,2,3)),paste0(substring(fl$arr_time_,1,2),":",substring(fl$arr_time_,3,4)))))
+
+fl$sched_arr_time1 <- ifelse(fl$sched_arr_time < 10,paste0("00:0",fl$sched_arr_time_),ifelse(fl$sched_arr_time < 100,paste0("00:",fl$sched_arr_time_),ifelse(fl$sched_arr_time < 1000,paste0("0",substring(fl$sched_arr_time_,1,1),":",substring(fl$sched_arr_time_,2,3)),paste0(substring(fl$sched_arr_time_,1,2),":",substring(fl$sched_arr_time_,3,4)))))
+
+fl$dep_time2 <- hm(fl$dep_time1)
+fl$sched_dep_time2 <- hm(fl$sched_dep_time1)
+fl$arr_time2 <- hm(fl$arr_time1)
+fl$sched_arr_time2 <- hm(fl$sched_arr_time1)
+
+fl$Delay <- (fl$dep_time2- fl$sched_dep_time2) + (fl$arr_time2- fl$sched_arr_time2)
+fl$Delay_Minutos <- period_to_seconds(fl$Delay)/60
+```
+
