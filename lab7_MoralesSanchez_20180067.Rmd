@@ -1,0 +1,134 @@
+---
+title: "Inv_Energia_20180067"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r}
+library(readr)
+library(stringr)
+library(lubridate)
+library(dplyr)
+postes <- read.csv("c1.csv")
+```
+
+Limpieza de datos 
+```{r}
+postes$Fecha <- dmy(postes$Fecha)
+guion <- function(a){
+a <- as.numeric(gsub(pattern = "-","0",a))
+return(a)  
+}
+postes$Camion_5 <- guion(postes$Camion_5)
+postes$Pickup <- guion(postes$Pickup)
+postes$Moto <- guion(postes$Moto)
+postes$directoCamion_5 <- guion(postes$directoCamion_5)
+postes$directoPickup <- guion(postes$directoPickup)
+postes$directoMoto <- guion(postes$directoMoto)
+postes$fijoCamion_5 <- guion(postes$fijoCamion_5)
+postes$fijoPickup <- guion(postes$fijoPickup)
+postes$fijoMoto <- guion(postes$fijoMoto)
+postes$X.5.30 <- ifelse(is.na(postes$X.5.30),0,1)
+postes$X30.45 <- ifelse(is.na(postes$X30.45),0,1)
+postes$X45.75 <- ifelse(is.na(postes$X45.75),0,1)
+postes$X75.120 <- ifelse(is.na(postes$X75.120),0,1)
+postes$X120. <- ifelse(is.na(postes$X120.),0,1)
+
+```
+
+Generacion ed columnas para análisis
+```{r}
+postes$mes <- month(postes$Fecha)
+postes$mes1.9 <- ifelse(postes$mes < 10,"1-9","10-12")
+postes$gasto_directo <- postes$directoCamion_5+postes$directoMoto+postes$directoPickup
+postes$gasto_fijo <- postes$fijoCamion_5+postes$fijoMoto+postes$fijoPickup
+postes$gasto <- postes$gasto_directo + postes$gasto_fijo
+postes$ingreso <- postes$factura
+postes$ingreso_iva <- postes$factura - postes$factura*0.12
+postes$neto <- postes$ingreso - postes$gasto
+postes$neto_iva <- postes$ingreso_iva - postes$gasto
+postes$unidad <- ifelse(postes$Camion_5 != 0,"Camion",ifelse(postes$Pickup != 0,"Pickup","Moto"))
+
+```
+
+Estado de resultados 
+```{r}
+c1 <- c("Ingreso","Costos_Directos","Costos_fijos","Utilidad_antes_ISR","Utilidad_Neta")
+c2 <- c(sum(postes$ingreso),sum(postes$gasto_directo),sum(postes$gasto_fijo),(sum(postes$ingreso)-sum(postes$gasto_directo)-sum(postes$gasto_fijo)),(sum(postes$ingreso)-sum(postes$gasto_directo)-sum(postes$gasto_fijo))-(sum(postes$ingreso)-sum(postes$gasto_directo)-sum(postes$gasto_fijo))*0.25)
+resultados_2017 <- data.frame(cbind(c1,c2))
+resultados_2017
+#write_excel_csv(resultados_2017,"Resultados_2017.xls")
+
+```
+
+Unidades
+```{r}
+unidades <- postes %>% group_by(unidad) %>% summarise(venta = sum(ingreso), utilidad = sum(neto), medio = mean(neto), margen = (sum(neto)/sum(ingreso)))
+unidades
+#write_excel_csv(unidades,"unidades.xls")
+
+```
+
+
+Aceptacion de tarifas
+```{r}
+tarifas_1 <- postes %>% filter(mes1.9 =="1-9") %>% group_by(Cod) %>% summarise(ocurrencias = n()/9)
+tarifas_2 <- postes %>% filter(mes1.9 =="10-12") %>% group_by(Cod) %>% summarise(ocurrencias = n()/3)
+tarifas <- cbind(tarifas_1,tarifas_2$ocurrencias)
+tarifas
+#write_excel_csv(tarifas,"tarifas.xls")
+
+```
+
+Posibles perdidas
+```{r}
+perdida <- postes[postes$neto_iva<0,]
+unidades_perdida <- perdida %>% group_by(unidad) %>% summarise(total = sum(neto_iva), media = mean(neto_iva),n())
+
+servicios_perdida <- perdida %>% group_by(Cod) %>% summarise(total = sum(neto_iva), media = mean(neto_iva),n())
+#write_excel_csv(servicios_perdida,"perdida1.xls")
+revision_perdida <- perdida %>% filter(Cod=="REVISION") %>% group_by(unidad) %>% summarise(total = sum(neto_iva), media = mean(neto_iva),n())
+VERIFICACION_MEDIDORES <- perdida %>% filter(Cod=="VERIFICACION_MEDIDORES") %>% group_by(unidad) %>% summarise(total = sum(neto_iva), media = mean(neto_iva),n())
+CAMBIO_CORRECTIVO <- perdida %>% filter(Cod=="CAMBIO_CORRECTIVO") %>% group_by(unidad) %>% summarise(total = sum(neto_iva), media = mean(neto_iva),n())
+#write_excel_csv(rbind(revision_perdida,VERIFICACION_MEDIDORES,CAMBIO_CORRECTIVO),"perdidas2.xls")
+
+```
+
+Clientes
+```{r}
+
+los_postes <- postes %>% group_by(ID) %>% summarise(venta = sum(ingreso), utilidad = sum(neto), trabajos = n(), directos = mean(gasto_directo)) %>% filter(directos > mean(directos)) %>% arrange(-trabajos)
+los_postes
+#write_excel_csv(los_postes,"postes.xls")
+
+mejores_postes <- postes %>% group_by(ID) %>% summarise(venta = sum(factura), mantenimiento = n())
+#write_excel_csv(mejores_postes,"clientes.xls")
+tipo_postes <- postes %>% group_by(height) %>% summarise(venta = sum(factura), mantenimiento = n())
+#write_excel_csv(tipo_postes,"tipos.xls")
+
+```
+
+
+Recorridos
+```{r}
+localidades <- split(x = postes,f = postes$origen)
+recorridos <- function(a){
+  ujuj <- a %>% group_by(ID) %>% summarise(margen = sum(neto)/sum(ingreso))
+  return(ujuj)
+}
+rep(1,2)[3]
+recs <- lapply(X = localidades,FUN = recorridos)
+l1 <- cbind(recs[[1]],rep(x = 150224,nrow(recs[[1]])))
+l2 <- cbind(recs[[2]],rep(x = 150277,nrow(recs[[2]])))
+l3 <- cbind(recs[[3]],rep(x = 150278,nrow(recs[[3]])))
+l4 <- cbind(recs[[4]],rep(x = 150841,nrow(recs[[4]])))
+names(l1) <- c("destino","margen","origen")
+names(l2) <- c("destino","margen","origen")
+names(l3) <- c("destino","margen","origen")
+names(l4) <- c("destino","margen","origen")
+#write_excel_csv(rbind(l1,l2,l3,l4),"recsa.xls")
+
+```
+
